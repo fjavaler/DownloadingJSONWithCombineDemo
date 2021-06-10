@@ -40,23 +40,35 @@ class ContentViewModel: ObservableObject {
     
     //1
     URLSession.shared.dataTaskPublisher(for: url)
-    //2 - This line not actually needed here in this example, since ".dataTaskPublisher" does this by default.
+      //2 - This line not actually needed here in this example, since ".dataTaskPublisher" does this by default.
       .subscribe(on: DispatchQueue.global(qos: .background))
-    //3 - Needed before we update the UI in subsequent steps.
+      //3 - Needed before we update the UI in subsequent steps.
       .receive(on: DispatchQueue.main)
-    //4 - References handleOutput helper method.
+      //4 - References handleOutput helper method.
       .tryMap(handleOutput)
-    //5
+      //5
       .decode(type: [PostModel].self, decoder: JSONDecoder())
-    //6
+      //6 - (Preferred) If errors occur in completionHandler, print error. Then post returned posts to UI.
       .sink { completionHandler in
-        // Eat
+        switch completionHandler {
+        case .finished:
+          print("finished!")
+        case .failure(let error):
+          print("There was an error. \(error)")
+        }
       } receiveValue: { [weak self] returnedPosts in
         self?.posts = returnedPosts
       }
-    //7
+      
+      //6 - (Alternative, not preferred since individual errors aren't printed) If errors occur during decode, replace data with empty array and post to UI.
+      //      .replaceError(with: [])
+      //      .sink(receiveValue: { [weak self] returnedPosts in
+      //        self?.posts = returnedPosts
+      //      })
+      
+      //7
       .store(in: &cancellables)
-
+    
   }
   
   /// Helper method that handles output.
@@ -66,7 +78,7 @@ class ContentViewModel: ObservableObject {
   func handleOutput(output: URLSession.DataTaskPublisher.Output) throws -> Data {
     guard
       let response = output.response as? HTTPURLResponse,
-          response.statusCode >= 200 && response.statusCode < 300 else {
+      response.statusCode >= 200 && response.statusCode < 300 else {
       throw URLError(.badServerResponse)
     }
     return output.data
